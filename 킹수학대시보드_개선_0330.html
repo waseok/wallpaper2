@@ -2167,15 +2167,15 @@
         font: "theme-font-jua"
 },
     memoBarText: "",
-    motto: "",
+    motto: "네 마음대로 할 수 있는 건 4살까지!",
     classNotice: "",
 
             schoolInfo: {
-                "학교명": "남산초등학교&ATPT_OFCDC_SC_CODE=B10",
-                "학년 반": "4학년 3반",
-                "나이스 API":     "ebb994f482464567894b3ca5f5cdeb96",
-                "학교 위도": "35.5597",
-                "학교 경도": "126.9767"
+                "학교명": "와석초등학교",
+                "학년 반": "4학년 5반",
+                "나이스 API": "9bbf6615f63c41258fb28adc36a5ed70",
+                "학교 위도": "37.6967",
+                "학교 경도": "126.7570"
             },
             linkInfo: [
                 { "링크명": "킹수학", "주소": "https://www.킹수학.com" },
@@ -2230,11 +2230,11 @@
 
 
         const CONFIG = {
-            API_URL: "data.js", 
-            LATITUDE: null,     
-            LONGITUDE: null,    
-            NEIS_API_KEY: "",   
-            SCHOOL_NAME: ""     
+            API_URL: "data.js",
+            LATITUDE: 37.6967,
+            LONGITUDE: 126.7570,
+            NEIS_API_KEY: "9bbf6615f63c41258fb28adc36a5ed70",
+            SCHOOL_NAME: "경기&ATPT_OFCDC_SC_CODE=&와석초"
         };
 
         let globalData = null;       
@@ -2813,7 +2813,8 @@
                 timeTableData.timeTable[1].row.forEach((row) => {
                     const dayName = row.ALL_TI_YMD ? new Date(row.ALL_TI_YMD).toLocaleDateString('ko-KR', {weekday: 'short'}).slice(0, 1) : '';
                     const period = parseInt(row.PERIO) || 0;
-                    const subject = row.ITRT_CNTNT || '자습';
+                    // 과목명 필드 시도 (나이스 API는 여러 필드명 사용 가능)
+                    const subject = row.ITRT_CNTNT || row.ITRPT_CNTNT || row.SBJ_NM || '자습';
 
                     if (dayName && timetable[dayName]) {
                         timetable[dayName][period - 1] = subject;
