@@ -4,6 +4,7 @@
     <title>test20260319 킹수학대쉬보드</title>
    
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-5YW0T2C109"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
@@ -1354,7 +1355,7 @@
             </div>
 
             <div id="StudentTab" class="tabcontent" style="display: none;">
-                <h3>Student Info (30명) <button class="reset-tab-btn" onclick="resetTab('StudentTab')">데이터 초기화</button></h3>
+                <h3>Student Info (30명) <button class="reset-tab-btn" onclick="resetTab('StudentTab')">데이터 초기화</button> <button class="reset-tab-btn" style="background:#38bdf8;" onclick="document.getElementById('excel-student-upload').click()">📁 엑셀 업로드</button><input type="file" id="excel-student-upload" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleStudentExcelUpload(event)"></h3>
                 <div id="student_grid_container"><div class="student-row">
                         <input type="text" placeholder="번호" value="1">
                         <input type="text" placeholder="이름" value="유재석">
@@ -1610,7 +1611,7 @@
             </div>
 
             <div id="TimeTab" class="tabcontent" style="display: none;">
-                <h3>Time Schedule <button class="reset-tab-btn" onclick="resetTab('TimeTab')">데이터 초기화</button></h3>
+                <h3>Time Schedule <button class="reset-tab-btn" onclick="resetTab('TimeTab')">데이터 초기화</button> <button class="reset-tab-btn" style="background:#10b981;" onclick="fetchTimeTableData()">🔄 나이스에서 불러오기</button></h3>
 
                 <!-- 🔔 알람 설정 -->
                 <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:10px 14px; margin-bottom:12px; flex-shrink:0;">
@@ -2641,15 +2642,29 @@
         });
 
         function playTone(frequency, startTime, duration, vol = 0.7) {
-            if (!audioCtx) return;
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain(); 
-            osc.type = 'sine'; osc.frequency.value = frequency; 
-            gain.gain.setValueAtTime(0, startTime);
-            gain.gain.linearRampToValueAtTime(vol, startTime + 0.05);
-            gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.start(startTime); osc.stop(startTime + duration);
+            if (!audioCtx) {
+                try {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) {
+                    console.error('AudioContext initialization failed:', e);
+                    return;
+                }
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(e => console.error('Resume failed:', e));
+            }
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine'; osc.frequency.value = frequency;
+                gain.gain.setValueAtTime(0, startTime);
+                gain.gain.linearRampToValueAtTime(vol, startTime + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(startTime); osc.stop(startTime + duration);
+            } catch (e) {
+                console.error('playTone error:', e);
+            }
         }
         function play1MinAlarm() {
             if (!audioCtx) return; const now = audioCtx.currentTime;
@@ -2740,6 +2755,80 @@
                     </div>`;
             } catch (error) { 
                 document.getElementById('weather-info').innerHTML = `<div class="weather-box" style="color: #ff4444;">날씨 정보를 불러오지 못했습니다. 🥲</div>`; 
+            }
+        }
+
+        async function fetchTimeTableData() {
+            const apiKey = CONFIG.NEIS_API_KEY;
+            const rawSchoolName = CONFIG.SCHOOL_NAME || '';
+            let schoolNameOnly = rawSchoolName;
+            let regionCode = '';
+            if (rawSchoolName.includes('&ATPT_OFCDC_SC_CODE=')) {
+                const parts = rawSchoolName.split('&ATPT_OFCDC_SC_CODE=');
+                schoolNameOnly = parts[0];
+                regionCode = parts[1];
+            }
+
+            if (!apiKey || !schoolNameOnly || !globalData || !globalData.schoolInfo['학년 반']) {
+                console.log('시간표 자동 불러오기: 학교 정보 미설정');
+                return;
+            }
+
+            try {
+                const regionParam = regionCode ? `&ATPT_OFCDC_SC_CODE=${regionCode}` : '';
+                const schoolRes = await fetch(
+                    `https://open.neis.go.kr/hub/schoolInfo?KEY=${apiKey}&Type=json&SCHUL_NM=${encodeURIComponent(schoolNameOnly)}${regionParam}`
+                );
+                const schoolData = await schoolRes.json();
+                if (!schoolData.schoolInfo || !schoolData.schoolInfo[1] || !schoolData.schoolInfo[1].row || schoolData.schoolInfo[1].row.length === 0) {
+                    console.error('시간표: 학교 정보 없음');
+                    return;
+                }
+
+                const rows = schoolData.schoolInfo[1].row;
+                const school = regionCode ? (rows.find(r => r.ATPT_OFCDC_SC_CODE === regionCode) || rows[0]) : rows[0];
+
+                const gradeClass = globalData.schoolInfo['학년 반'] || '';
+                const gradeMatch = gradeClass.match(/(\d)/);
+                const classMatch = gradeClass.match(/(\d+)$/);
+                const grade = gradeMatch ? gradeMatch[1] : '1';
+                const className = classMatch ? classMatch[1] : '1';
+
+                const now = getNow();
+                const sy = String(now.getFullYear());
+                const sem = now.getMonth() < 6 ? '1' : '2';
+
+                const timeTableUrl = `https://open.neis.go.kr/hub/timeTable?KEY=${apiKey}&Type=json&ATPT_OFCDC_SC_CODE=${school.ATPT_OFCDC_SC_CODE}&SD_SCHUL_CODE=${school.SD_SCHUL_CODE}&SY=${sy}&SEM=${sem}&GRADE=${grade}&CLASS_NM=${className}`;
+                const timeTableRes = await fetch(timeTableUrl);
+                const timeTableData = await timeTableRes.json();
+
+                if (!timeTableData.timeTable || !timeTableData.timeTable[1] || !timeTableData.timeTable[1].row) {
+                    console.log('시간표: 데이터 없음');
+                    return;
+                }
+
+                const dayMap = {'월': 'MON', '화': 'TUE', '수': 'WED', '목': 'THU', '금': 'FRI', '토': 'SAT', '일': 'SUN'};
+                const timetable = {'월': [], '화': [], '수': [], '목': [], '금': [], '토': [], '일': []};
+
+                timeTableData.timeTable[1].row.forEach((row) => {
+                    const dayName = row.ALL_TI_YMD ? new Date(row.ALL_TI_YMD).toLocaleDateString('ko-KR', {weekday: 'short'}).slice(0, 1) : '';
+                    const period = parseInt(row.PERIO) || 0;
+                    const subject = row.ITRT_CNTNT || '자습';
+
+                    if (dayName && timetable[dayName]) {
+                        timetable[dayName][period - 1] = subject;
+                    }
+                });
+
+                if (!globalData.timetable) globalData.timetable = {'월': [], '화': [], '수': [], '목': [], '금': []};
+                Object.assign(globalData.timetable, timetable);
+                saveData();
+
+                alert(`✅ 시간표를 자동으로 불러왔습니다!\n${grade}학년 ${className}반`);
+                loadData();
+            } catch (error) {
+                console.error('시간표 자동 불러오기 실패:', error);
+                alert(`❌ 시간표 불러오기 실패\n${error.message}`);
             }
         }
 
@@ -3057,6 +3146,59 @@
             setTimeout(() => play1MinAlarm(), 2200);
         }
 
+        function handleStudentExcelUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: false,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const data = results.data;
+                    if (data.length < 5) {
+                        alert('엑셀 형식이 올바르지 않습니다. 최소 5행이 필요합니다.');
+                        return;
+                    }
+
+                    const gradeRow = data[0][0] || '';
+                    const classRow = data[1][0] || '';
+
+                    if (!globalData) globalData = DEFAULT_DATA;
+                    globalData.schoolInfo['학년 반'] = gradeRow.trim() + classRow.trim();
+
+                    const container = document.getElementById('student_grid_container');
+                    if (!container) return;
+                    container.innerHTML = '';
+
+                    const studentRows = data.slice(4);
+                    studentRows.forEach((row, idx) => {
+                        if (!row[1] || !row[1].trim()) return;
+                        const num = (row[0] || '').toString().trim();
+                        const name = (row[1] || '').toString().trim();
+                        const gender = (row[2] || 'M').toString().toUpperCase().includes('F') ? '여' : '남';
+                        const birth = (row[3] || '').toString().trim();
+
+                        const div = document.createElement('div');
+                        div.className = 'student-row';
+                        div.innerHTML = `
+                            <input type="text" placeholder="번호" value="${num}">
+                            <input type="text" placeholder="이름" value="${name}">
+                            <div class="student-gender-box">
+                                <label><input type="radio" name="gender_${idx}" value="남" ${gender === '남' ? 'checked' : ''}> 남</label>
+                                <label><input type="radio" name="gender_${idx}" value="여" ${gender === '여' ? 'checked' : ''}> 여</label>
+                            </div>
+                            <input type="text" class="birth-input" placeholder="생년월일" value="${birth}">
+                            <button onclick="clearStudentRow(this)">X</button>
+                        `;
+                        container.appendChild(div);
+                    });
+
+                    saveData();
+                    alert(`${studentRows.length}명의 학생 정보를 불러왔습니다.`);
+                }
+            });
+        }
+
         function renderMemoBar() {
             const text = (globalData && globalData.motto) || '';
             const display = document.getElementById('memo-display');
@@ -3097,9 +3239,15 @@
         }
 
         function saveMemo(text) {
-            if (!globalData) return;
+            if (!globalData) {
+                globalData = DEFAULT_DATA;
+            }
             globalData.motto = text.trim();
-            localStorage.setItem('kingmath-dashboard-data', JSON.stringify(globalData));
+            try {
+                localStorage.setItem('kingmath-dashboard-data', JSON.stringify(globalData));
+            } catch (e) {
+                console.error('localStorage save failed:', e);
+            }
             const bar = document.getElementById('memo-bar');
             if (bar) {
                 const input = bar.querySelector('input#memo-display');
