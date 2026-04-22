@@ -3533,14 +3533,24 @@
         // 메인 데이터 로딩
   function loadData() {
     try {
-        // 1순위: localStorage 저장 데이터
+        // 개인용 대시보드 - DEFAULT_DATA 우선 사용
+        globalData = JSON.parse(JSON.stringify(DEFAULT_DATA));
+
+        // localStorage에서 사용자 커스텀 데이터만 로드 (급훈, 할일 등)
         const lsSaved = localStorage.getItem('kingmath-dashboard-data');
         if (lsSaved) {
-            try { globalData = JSON.parse(lsSaved); } catch(e) { globalData = null; }
-        }
-        // 2순위: data.js 파일
-        if (!globalData) {
-            globalData = (typeof localData !== 'undefined') ? localData : DEFAULT_DATA;
+            try {
+                const savedData = JSON.parse(lsSaved);
+                // 사용자가 직접 수정한 항목만 병합
+                if (savedData.motto) globalData.motto = savedData.motto;
+                if (savedData.classNotice) globalData.classNotice = savedData.classNotice;
+                if (savedData.todoList && savedData.todoList.length > 0) globalData.todoList = savedData.todoList;
+                if (savedData.timetable) globalData.timetable = savedData.timetable;
+                if (savedData.monthlyPlans) globalData.monthlyPlans = savedData.monthlyPlans;
+                if (savedData.studentInfo && savedData.studentInfo.length > 0) globalData.studentInfo = savedData.studentInfo;
+            } catch(e) {
+                console.log('커스텀 데이터 로드 실패, DEFAULT_DATA 사용');
+            }
         }
         const data = globalData;
 
